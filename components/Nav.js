@@ -13,22 +13,33 @@ const TABS = [
 
 export default function Nav() {
   const router = useRouter();
+  const [clickCount, setClickCount] = useState(0);
   const [showAdmin, setShowAdmin] = useState(false);
+
+  const handleLogoClick = () => {
+    const newCount = clickCount + 1;
+    setClickCount(newCount);
+    
+    if (newCount >= 3) {
+      setShowAdmin(!showAdmin);
+      setClickCount(0);
+    }
+    
+    setTimeout(() => setClickCount(0), 1000);
+  };
 
   return (
     <nav style={{ background:'#0a0f1a', borderBottom:'1px solid rgba(255,255,255,0.07)', position:'sticky', top:0, zIndex:50 }}>
       <div style={{ maxWidth:1100, margin:'0 auto', padding:'0 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
-        <a href="/" style={{ textDecoration:'none', flexShrink:0 }}>
-          <div style={{ padding:'10px 0', display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}
-            onDoubleClick={() => setShowAdmin(!showAdmin)}
-          >
+        <div onClick={handleLogoClick} style={{ textDecoration:'none', flexShrink:0, cursor:'pointer' }}>
+          <div style={{ padding:'10px 0', display:'flex', alignItems:'center', gap:10 }}>
             <img src="/logo.jpg" alt="1σ" style={{ width:36, height:36, borderRadius:8, objectFit:'cover' }} />
             <div>
               <div style={{ fontSize:13, fontWeight:700, color:'#ffffff', letterSpacing:'0.02em' }}>1σ 매수단</div>
               <div style={{ fontSize:9, color:'#6366f1', letterSpacing:'0.1em', textTransform:'uppercase' }}>Sigma Buyers · 1기 2026</div>
             </div>
           </div>
-        </a>
+        </div>
         <div style={{ display:'flex', gap:1, flexWrap:'wrap', justifyContent:'flex-end' }}>
           {TABS.map(t => (
             <a key={t.href} href={t.href} style={{
@@ -43,8 +54,8 @@ export default function Nav() {
             <a href="/admin" style={{
               padding:'7px 9px', borderRadius:7, fontSize:11, textDecoration:'none',
               fontWeight: router.pathname === '/admin' ? 600 : 400,
-              background: router.pathname === '/admin' ? 'rgba(99,102,241,0.2)' : 'transparent',
-              color: router.pathname === '/admin' ? '#a5b4fc' : '#64748b',
+              background: router.pathname === '/admin' ? 'rgba(99,102,241,0.2)' : 'rgba(239,68,68,0.15)',
+              color: router.pathname === '/admin' ? '#a5b4fc' : '#f87171',
               whiteSpace:'nowrap',
             }}>⚙️ 관리자</a>
           )}
