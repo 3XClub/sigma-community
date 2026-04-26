@@ -49,7 +49,7 @@ export default function Backtest() {
       <div style={{ marginBottom:22 }}>
         <div style={{ fontSize:11, color:'#475569', letterSpacing:'0.1em', textTransform:'uppercase', fontFamily:'monospace', marginBottom:6 }}>1σ Strategy Backtester</div>
         <h1 style={{ fontSize:24, fontWeight:700 }}>📊 1σ 전략 백테스터</h1>
-        <p style={{ fontSize:13, color:'#475569', marginTop:5 }}>3년 실제 데이터 · 연속 하락 동적 사이징 vs 고정 사이징 비교</p>
+        <p style={{ fontSize:13, color:'#475569', marginTop:5 }}>1년 실제 데이터 · 익절 없이 최종 평가 · 동적 vs 고정 사이징 비교</p>
       </div>
 
       <div style={{ background:'#0f172a', borderRadius:14, border:'1px solid #1e2d3d', padding:'22px', marginBottom:18 }}>
@@ -92,7 +92,7 @@ export default function Backtest() {
 
         <button onClick={run} disabled={loading} style={{ width:'100%', padding:12, borderRadius:10, background:loading?'#1e2d3d':(sym?.color||'#6366f1'), color:'white', fontSize:15, fontWeight:700, border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
           <span style={{ display:'inline-block', animation:loading?'spin 1s linear infinite':'none', fontSize:18 }}>⟳</span>
-          {loading?'Yahoo Finance 3년 데이터 분석 중...':'백테스트 실행'}
+          {loading?'Yahoo Finance 1년 데이터 분석 중...':'백테스트 실행'}
         </button>
       </div>
 
@@ -102,11 +102,11 @@ export default function Backtest() {
         <div style={{ textAlign:'center', padding:'70px 0', color:'#475569' }}>
           <div style={{ fontSize:44, marginBottom:14 }}>📊</div>
           <div style={{ fontSize:15, fontWeight:500, color:'#64748b', marginBottom:6 }}>설정 후 백테스트를 실행하세요</div>
-          <div style={{ fontSize:13 }}>3년 실제 데이터로 동적 사이징 전략의 효과를 검증합니다</div>
+          <div style={{ fontSize:13 }}>1년 실제 데이터 · 익절 없이 보유 시 최종 수익률을 비교합니다</div>
         </div>
       )}
 
-      {loading && <div style={{ textAlign:'center', padding:'70px 0', color:'#475569' }}><div style={{ fontSize:36, display:'inline-block', animation:'spin 1s linear infinite', marginBottom:14 }}>⟳</div><div style={{ fontSize:14 }}>Yahoo Finance에서 3년치 데이터 수집 중...</div></div>}
+      {loading && <div style={{ textAlign:'center', padding:'70px 0', color:'#475569' }}><div style={{ fontSize:36, display:'inline-block', animation:'spin 1s linear infinite', marginBottom:14 }}>⟳</div><div style={{ fontSize:14 }}>Yahoo Finance에서 1년치 데이터 수집 중...</div></div>}
 
       {result && !loading && (
         <div style={{ animation:'fadeUp 0.4s ease' }}>
@@ -116,7 +116,7 @@ export default function Backtest() {
               {[
                 { label:'🎯 동적 사이징', val:`${d?.totalReturn>=0?'+':''}${d?.totalReturn}%`, sub:`최종 $${d?.finalEquity.toLocaleString()}`, color:d?.totalReturn>=0?'#4ade80':'#f87171', hi:true },
                 { label:'📌 고정 사이징', val:`${b?.totalReturn>=0?'+':''}${b?.totalReturn}%`, sub:`최종 $${b?.finalEquity.toLocaleString()}`, color:b?.totalReturn>=0?'#4ade80':'#f87171' },
-                { label:'📈 바이앤홀드', val:`${result.buyHoldReturn>=0?'+':''}${result.buyHoldReturn}%`, sub:'3년 단순 보유', color:result.buyHoldReturn>=0?'#4ade80':'#f87171' },
+                { label:'📈 바이앤홀드', val:`${result.buyHoldReturn>=0?'+':''}${result.buyHoldReturn}%`, sub:'1년 단순 보유', color:result.buyHoldReturn>=0?'#4ade80':'#f87171' },
               ].map((item,i) => (
                 <div key={i} style={{ background:'#0a1628', borderRadius:12, padding:18, border:`${i===0?'2px':'1px'} solid ${i===0?'#6366f1':'#1e2d3d'}` }}>
                   <div style={{ fontSize:11, color:'#475569', marginBottom:10, fontWeight:600 }}>{item.label}</div>
@@ -130,7 +130,7 @@ export default function Backtest() {
           {result.combined?.length > 0 && (
             <div style={{ background:'#0f172a', borderRadius:14, border:'1px solid #1e2d3d', padding:20, marginBottom:14 }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>💰 자산 추이 비교</div>
-              <div style={{ fontSize:12, color:'#475569', marginBottom:14 }}>동적 vs 고정 사이징 3년간 비교</div>
+              <div style={{ fontSize:12, color:'#475569', marginBottom:14 }}>동적 vs 고정 사이징 1년간 비교 (익절 없이 최종 평가)</div>
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={result.combined}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e2d3d" />
@@ -146,9 +146,9 @@ export default function Backtest() {
           )}
 
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
-            <Stat label="연간 평균 매수" value={`${d?.annualTrades}회`} sub="3년 평균" />
+            <Stat label="1년 총 매수 횟수" value={`${d?.buyCount}회`} sub="1σ 터치 매수 합계" />
             <Stat label="최대 연속 하락" value={`${d?.maxStreak}회`} sub="최장 연속" color="#f87171" />
-            <Stat label="승률" value={`${d?.winRate}%`} sub={`${d?.wins}승 ${d?.losses}패`} color="#4ade80" />
+            <Stat label="미실현 손익" value={`${d?.unrealizedPnl>=0?'+':''}$${d?.unrealizedPnl?.toFixed(0)}`} sub="기말 보유분 평가" color={d?.unrealizedPnl>=0?"#4ade80":"#f87171"} />
             <Stat label="최대 낙폭" value={`-${d?.maxDrawdown}%`} sub="MDD" color="#f87171" />
           </div>
         </div>
