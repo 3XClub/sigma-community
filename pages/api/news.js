@@ -1,4 +1,9 @@
 export default async function handler(req, res) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다. Vercel 대시보드에서 추가해주세요.' });
+  }
+
   const today = new Date().toLocaleDateString('ko-KR');
 
   const prompt = `오늘(${today}) 기준 한국 투자자에게 중요한 금융·경제·정책 뉴스 8개를 웹 검색해서 수집해줘.
@@ -10,8 +15,8 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'messages-2023-12-15',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
@@ -28,15 +33,12 @@ export default async function handler(req, res) {
 
     const data = await response.json();
     const textBlocks = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-
-    // JSON 파싱
     const match = textBlocks.match(/\[[\s\S]*?\]/);
-    if (!match) throw new Error('뉴스 JSON을 찾을 수 없습니다.');
+    if (!match) throw new Error('뉴스 JSON을 파싱할 수 없습니다.');
 
     const news = JSON.parse(match[0]);
     res.status(200).json({ news, updatedAt: new Date().toISOString() });
-
-  } catch (e) {
+  } catch(e) {
     console.error('News API error:', e);
     res.status(500).json({ error: e.message });
   }
