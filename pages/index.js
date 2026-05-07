@@ -3,12 +3,13 @@ import { supabase } from '../lib/supabase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const MEDAL = ['🥇','🥈','🥉'];
+
 function Card({ label, value, sub, color='#e2e8f0', accent='#1e2d3d' }) {
   return (
-    <div style={{ background: '#0f172a', borderRadius: 12, padding: '16px 18px', border: `1px solid ${accent}` }}>
-      <div style={{ fontSize: 11, color: '#475569', marginBottom: 5, fontWeight: 500 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color, fontFamily: 'monospace' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: '#475569', marginTop: 3 }}>{sub}</div>}
+    <div style={{ background:'#0f172a', borderRadius:12, padding:'16px 18px', border:`1px solid ${accent}` }}>
+      <div style={{ fontSize:11, color:'#475569', marginBottom:5, fontWeight:500 }}>{label}</div>
+      <div style={{ fontSize:22, fontWeight:700, color, fontFamily:'monospace' }}>{value}</div>
+      {sub && <div style={{ fontSize:11, color:'#475569', marginTop:3 }}>{sub}</div>}
     </div>
   );
 }
@@ -17,35 +18,79 @@ export default function Home() {
   const [participants, setParticipants] = useState([]);
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastPrice, setLastPrice] = useState({});
 
-  useEffect(() => {
-    async function load() {
-      const { data: p } = await supabase.from('participants').select('*').eq('status','approved').order('joined_at');
-      const { data: t } = await supabase.from('trades').select('*').order('trade_date');
-      setParticipants(p || []); setTrades(t || []); setLoading(false);
-    }
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
+
+  async function load() {
+    setLoading(true);
+    const { data: p } = await supabase.from('participants').select('*').eq('status','approved').order('joined_at');
+    const { data: t } = await supabase.from('trades').select('*').order('trade_date');
+    setParticipants(p || []); setTrades(t || []); setLoading(false);
+  }
+
+  async function refreshPrices() {
+    setRefreshing(true);
+    try {
+      const prices = {};
+      const symbols = ['TQQQ', 'QLD', 'SOXL'];
+      for (const sym of symbols) {
+        const res = await fetch(`/api/sigma?symbol=${sym}`);
+        const data = await res.json();
+        if (data.stocks?.length > 0) {
+          prices[sym] = data.stocks[0].lastClose;
+        }
+      }
+      setLastPrice(prices);
+    } catch(e) { console.error(e); }
+    setRefreshing(false);
+  }
 
   const board = participants.map(p => {
     const my = trades.filter(t => t.participant_id === p.id);
-    const pnl = my.filter(t => t.type==='SELL').reduce((s,t) => s+(t.pnl||0), 0);
-    const ret = p.seed_usd > 0 ? (pnl/p.seed_usd)*100 : 0;
-    return { ...p, pnl, ret, wins: my.filter(t=>t.type==='SELL'&&t.pnl>0).length, losses: my.filter(t=>t.type==='SELL'&&t.pnl<=0).length, cnt: my.length };
+    const buys = my.filter(t => t.type === 'BUY');
+    const sells = my.filter(t => t.type === 'SELL');
+    
+    // 실현 손익
+    const realizedPnl = sells.reduce((s, t) => s + (t.pnl || 0), 0);
+    
+    // 미실현 손익
+    let unrealizedPnl = 0;
+    const holdings = {};
+    buys.forEach(t => {
+      if (!holdings[t.symbol]) holdings[t.symbol] = { qty: 0, cost: 0 };
+      holdings[t.symbol].qty += t.amount_usd / t.price;
+      holdings[t.symbol].cost += t.amount_usd;
+    });
+    sells.forEach(t => {
+      if (holdings[t.symbol]) {
+        holdings[t.symbol].qty -= t.amount_usd / t.price;
+        holdings[t.symbol].cost -= t.amount_usd;
+      }
+    });
+    Object.entries(holdings).forEach(([sym, h]) => {
+      if (h.qty > 0 && lastPrice[sym]) {
+        unrealizedPnl += h.qty * lastPrice[sym] - h.cost;
+      }
+    });
+
+    const totalPnl = realizedPnl + unrealizedPnl;
+    const ret = p.seed_usd > 0 ? (totalPnl / p.seed_usd) * 100 : 0;
+    return { ...p, realizedPnl, unrealizedPnl, totalPnl, ret, wins: sells.filter(t=>t.pnl>0).length, losses: sells.filter(t=>t.pnl<=0).length, cnt: buys.length };
   }).sort((a,b) => b.ret - a.ret);
 
   const totalSeed = participants.reduce((s,p) => s+p.seed_usd, 0);
-  const totalPnl = board.reduce((s,p) => s+p.pnl, 0);
+  const totalPnl = board.reduce((s,p) => s+p.totalPnl, 0);
   const avgRet = board.length > 0 ? board.reduce((s,p) => s+p.ret, 0)/board.length : 0;
   const monthly = {}; trades.filter(t=>t.type==='SELL').forEach(t => { const m=t.trade_date?.slice(0,7); if(m) monthly[m]=(monthly[m]||0)+(t.pnl||0); });
   const chart = Object.entries(monthly).sort().map(([m,v]) => ({ m, v: +v.toFixed(0) }));
 
-  if (loading) return <div style={{ textAlign:'center', padding: 80, color:'#475569' }}>⟳ 로딩 중...</div>;
+  if (loading) return <div style={{ textAlign:'center', padding:80, color:'#475569' }}>⟳ 로딩 중...</div>;
 
   return (
     <div style={{ animation:'fadeUp 0.3s ease' }}>
-      {/* Hero */}
-      <div style={{ background:'linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)', borderRadius:16, padding:'36px 32px 28px', marginBottom:18, border:'1px solid rgba(99,102,241,0.2)', position:'relative', overflow:'hidden' }}>
+      <div style={{ background:'linear-gradient(135deg,#0f172a,#1e1b4b)', borderRadius:16, padding:'36px 32px 28px', marginBottom:18, border:'1px solid rgba(99,102,241,0.2)', position:'relative', overflow:'hidden' }}>
         <div style={{ position:'absolute', top:-80, right:-80, width:360, height:360, borderRadius:'50%', background:'radial-gradient(circle,rgba(99,102,241,0.08) 0%,transparent 70%)', pointerEvents:'none' }} />
         <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:16 }}>
           <img src="/logo.jpg" alt="1σ" style={{ width:56, height:56, borderRadius:12, objectFit:'cover' }} />
@@ -63,14 +108,17 @@ export default function Home() {
         <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
           <a href="/join" style={{ background:'#6366f1', color:'white', padding:'10px 22px', borderRadius:8, fontSize:13, fontWeight:600 }}>🙋 1기 참가 신청</a>
           <a href="/sigma" style={{ background:'rgba(255,255,255,0.06)', color:'#94a3b8', padding:'10px 22px', borderRadius:8, fontSize:13, border:'1px solid rgba(255,255,255,0.1)' }}>📡 오늘의 1σ 확인</a>
-          <a href="/my" style={{ background:'rgba(255,255,255,0.06)', color:'#94a3b8', padding:'10px 22px', borderRadius:8, fontSize:13, border:'1px solid rgba(255,255,255,0.1)' }}>🔐 나의 현황</a>
+          <button onClick={refreshPrices} disabled={refreshing} style={{ background:'rgba(255,255,255,0.06)', color:'#94a3b8', padding:'10px 22px', borderRadius:8, fontSize:13, border:'1px solid rgba(255,255,255,0.1)', cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ display:'inline-block', animation:refreshing?'spin 1s linear infinite':'none' }}>⟳</span>
+            {refreshing ? '조회 중...' : '💹 현재가 새로고침'}
+          </button>
         </div>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:16 }}>
         <Card label="참가자" value={`${participants.length}명`} sub="1기 현재" />
         <Card label="총 운용 씨드" value={`$${totalSeed.toLocaleString()}`} sub="합산" />
-        <Card label="커뮤니티 총 손익" value={`${totalPnl>=0?'+':''}$${totalPnl.toFixed(0)}`} sub="실현 손익" color={totalPnl>=0?'#4ade80':'#f87171'} accent={totalPnl>=0?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'} />
+        <Card label="커뮤니티 총 손익" value={`${totalPnl>=0?'+':''}$${totalPnl.toFixed(0)}`} sub="실현+미실현" color={totalPnl>=0?'#4ade80':'#f87171'} accent={totalPnl>=0?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'} />
         <Card label="평균 수익률" value={`${avgRet>=0?'+':''}${avgRet.toFixed(1)}%`} sub="참가자 평균" color={avgRet>=0?'#4ade80':'#f87171'} accent={avgRet>=0?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'} />
       </div>
 
@@ -93,7 +141,7 @@ export default function Home() {
       <div style={{ background:'#0f172a', borderRadius:14, border:'1px solid #1e2d3d', overflow:'hidden', marginBottom:16 }}>
         <div style={{ padding:'18px 20px', borderBottom:'1px solid #1e2d3d' }}>
           <div style={{ fontSize:14, fontWeight:600 }}>🏆 수익률 리더보드</div>
-          <div style={{ fontSize:12, color:'#475569', marginTop:3 }}>실현 손익 기준 · 실시간</div>
+          <div style={{ fontSize:12, color:'#475569', marginTop:3 }}>실현+미실현 기준 · 새로고침 후 업데이트</div>
         </div>
         {board.length === 0 ? (
           <div style={{ padding:48, textAlign:'center', color:'#475569', fontSize:14 }}>아직 참가자가 없습니다. <a href="/join" style={{ color:'#6366f1' }}>첫 번째로 참가하세요!</a></div>
@@ -102,13 +150,13 @@ export default function Home() {
             <div style={{ fontSize:i<3?20:13, textAlign:'center', color:'#475569', fontWeight:700 }}>{i<3?MEDAL[i]:i+1}</div>
             <div>
               <div style={{ fontWeight:600, fontSize:14 }}>{p.nickname}</div>
-              <div style={{ fontSize:11, color:'#475569' }}>씨드 ${p.seed_usd.toLocaleString()} · {p.cnt}회</div>
+              <div style={{ fontSize:11, color:'#475569' }}>씨드 ${p.seed_usd.toLocaleString()} · {p.cnt}회 매수</div>
             </div>
             <div style={{ textAlign:'right' }}>
               <div style={{ fontFamily:'monospace', fontWeight:700, fontSize:16, color:p.ret>=0?'#4ade80':'#f87171' }}>{p.ret>=0?'+':''}{p.ret.toFixed(2)}%</div>
               <div style={{ fontSize:11, color:'#475569' }}>수익률</div>
             </div>
-            <div style={{ textAlign:'right', fontFamily:'monospace', fontWeight:600, color:p.pnl>=0?'#4ade80':'#f87171' }}>{p.pnl>=0?'+':''}${p.pnl.toFixed(0)}</div>
+            <div style={{ textAlign:'right', fontFamily:'monospace', fontWeight:600, color:p.totalPnl>=0?'#4ade80':'#f87171' }}>{p.totalPnl>=0?'+':''}${p.totalPnl.toFixed(0)}</div>
             <div style={{ textAlign:'right', fontSize:12, color:'#4ade80', fontWeight:600 }}>{p.wins}승</div>
             <div style={{ textAlign:'right', fontSize:12, color:'#f87171', fontWeight:600 }}>{p.losses}패</div>
           </div>
